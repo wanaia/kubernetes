@@ -1,0 +1,257 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Kubernetes 1.32 源码阅读指南
+
+## 核心概念和架构
+
+### Kubernetes 总体架构
+- Kubernetes 采用主从架构，由 Control Plane（控制平面）和 Node（节点）组成
+- Control Plane 包含 API Server、Scheduler、Controller Manager 和 etcd
+- Node 运行 kubelet、kube-proxy 和容器运行时（通常是 containerd 或 Docker）
+- 组件间通过 API Server 进行通信，采用声明式 API
+
+### 核心组件职责
+- `kube-apiserver`: 提供 REST API，是所有组件通信的核心
+- `etcd`: 分布式键值存储，保存集群所有状态
+- `kube-scheduler`: 负责 Pod 调度决策
+- `kube-controller-manager`: 运行各种控制器，确保集群状态符合期望
+- `kubelet`: 在每个节点上运行，管理容器生命周期
+- `kube-proxy`: 管理 Service 网络规则
+- `cloud-controller-manager`: 与云服务提供商集成的控制器
+
+## 源码目录结构解析
+
+### 顶层目录及其用途
+- `/cmd`: 包含所有可执行文件的主入口点
+- `/pkg`: 包含绝大部分的库代码
+- `/staging`: 存放可单独发布的库代码包
+- `/vendor`: 第三方依赖库
+- `/api`: API 定义和开放 API 规范
+- `/test`: 测试代码和测试框架
+- `/hack`: 开发脚本和工具
+- `/build`: 构建相关的工具和脚本
+- `/cluster`: 集群部署脚本和配置
+
+### 关键目录详细解析
+- `/cmd/kube-apiserver`: API Server 实现
+  - `app/server.go`: 服务器实现
+  - `apiserver.go`: 主入口点
+- `/cmd/kube-scheduler`: 调度器实现
+  - `app/server.go`: 调度器服务器实现
+  - `scheduler.go`: 主入口点
+- `/cmd/kube-controller-manager`: 控制器管理器实现
+  - `app/controllermanager.go`: 控制器管理器
+  - `controller-manager.go`: 主入口点
+- `/cmd/kubelet`: 节点代理实现
+  - `app/server.go`: kubelet 服务器
+  - `kubelet.go`: 主入口点
+- `/pkg/api`: 核心 API 定义
+- `/pkg/apis`: 各种 API 组定义
+- `/pkg/controller`: 控制器实现
+- `/pkg/scheduler`: 调度器框架和算法
+- `/pkg/kubelet`: kubelet 实现细节
+- `/pkg/proxy`: kube-proxy 实现
+
+## 源码阅读路线图
+
+### 初阶阅读路线
+1. 从 `/cmd` 目录开始，了解各个组件的入口点
+2. 探索 `/pkg/api` 和 `/pkg/apis` 理解 API 结构
+3. 阅读 `/pkg/kubelet` 了解节点代理实现
+4. 学习 `/pkg/scheduler` 了解调度流程
+5. 研究 `/pkg/controller` 了解控制器模式实现
+
+### 中阶阅读路线
+1. 深入研究 API Server 实现（`/pkg/controlplane/apiserver`）
+2. 了解 API 注册和扩展机制
+3. 学习控制器实现模式和协调逻辑
+4. 研究资源版本和转换机制
+5. 了解调度器框架和插件系统
+
+### 高阶阅读路线
+1. 研究 CRD 和聚合层 API 扩展机制
+2. 了解 ETCD 交互和存储机制
+3. 研究 Kubernetes 的认证和授权流程
+4. 探索高级网络和服务发现实现
+5. 学习 Kubernetes 的降级和容错机制
+
+## 重要流程解析
+
+### API 请求处理流程
+1. API Server 接收 HTTP 请求
+2. 经过认证、授权、准入控制
+3. 处理请求（CRUD 操作）
+4. 存储到 etcd
+5. 返回响应
+
+### Pod 创建流程
+1. 客户端（如 kubectl）创建 Pod 对象
+2. API Server 验证并存储 Pod 对象
+3. Scheduler 观察到未调度的 Pod，为其选择节点
+4. API Server 更新 Pod 对象（添加节点信息）
+5. Kubelet 观察到分配给它的 Pod，开始创建容器
+6. Pod 状态不断更新直到运行
+
+### 控制器协调流程
+1. 控制器通过 Informer 机制监视资源变化
+2. 发现变化后将对象键入工作队列
+3. 工作线程处理队列项目
+4. 读取当前状态，计算期望状态
+5. 通过 API Server 更新资源
+
+## Golang 相关规则
+
+### Go 语言特性
+- 理解 Go 的并发模型（Goroutine 和 Channel）
+- 熟悉接口和结构体的设计模式
+- 掌握 Go 内存模型和垃圾收集机制
+- 学习 Go 的错误处理模式
+
+### Kubernetes 中的 Go 编码规范
+- 遵循标准的 Go 编码规范
+- 理解 defer、panic 和 recover 的使用
+- 掌握 Go 的接口设计和组合使用
+- 学习 context 包在请求处理中的应用
+- 理解 Kubernetes 中的依赖注入模式
+
+### 重要的 Go 库和模式
+- `client-go`: Kubernetes 客户端库
+- `apimachinery`: API 辅助功能库
+- `informer` 模式: 高效监视资源变化
+- `workqueue`: 工作队列实现异步处理
+- `controller` 模式: 声明式协调逻辑
+
+## 调试和开发环境设置
+
+### 开发环境配置
+- 安装 Go 1.22+
+- 配置 GOPATH 和 GOROOT
+- 安装 Docker 或 Podman
+- 配置 kind 或 minikube 进行本地测试
+- 设置 VS Code 或 GoLand 的 Go 开发环境
+
+### 单元测试和集成测试
+- 了解 Kubernetes 的测试框架
+- 学习使用 `go test` 运行单元测试
+- 掌握表驱动测试模式
+- 学习模拟和测试替身的使用
+- 理解集成测试的编写方法
+
+### 调试技巧
+- 使用 Delve 进行 Go 程序调试
+- 利用日志和事件进行观察和排查
+- 掌握 kubectl 的调试命令
+- 理解如何分析组件状态和日志
+- 熟悉常见问题的排查思路
+
+## 扩展和插件系统
+
+### 自定义资源定义 (CRD)
+- 理解 CRD 的设计和实现
+- 学习如何扩展 Kubernetes API
+- 掌握控制器模式和 Operator 开发
+
+### API 扩展机制
+- Webhook 机制（验证和变更）
+- 聚合层 API 服务
+- 准入控制器实现
+
+### 调度器扩展
+- 调度器框架和插件系统
+- 调度算法定制和扩展点
+- 亲和性和反亲和性机制
+
+## 网络和存储实现
+
+### 网络模型
+- Pod 网络模型实现
+- Service 和 Endpoint 控制器
+- kube-proxy 和 iptables/IPVS 规则
+- NetworkPolicy 实现机制
+
+### 存储系统
+- PersistentVolume 子系统设计
+- Volume 控制器和 AttachDetach 控制器
+- CSI (Container Storage Interface) 集成
+- 动态存储配置机制
+
+## 安全机制
+
+### 认证和授权
+- RBAC 实现机制
+- 认证插件和链式认证
+- ServiceAccount 实现
+- 授权模式和决策流程
+
+### 准入控制
+- 准入控制器链
+- 变更准入和验证准入
+- 自定义准入控制器实现
+
+### 加密和 TLS
+- Secret 数据加密
+- TLS 双向认证
+- 证书轮换机制
+
+## 性能和可扩展性
+
+### 资源管理
+- 资源请求和限制实现
+- QoS 类别和驱逐策略
+- Horizontal Pod Autoscaler 实现
+- Vertical Pod Autoscaler 机制
+
+### 集群可扩展性
+- etcd 性能优化
+- API 优先级和公平性机制
+- 适用于大规模集群的设计模式
+
+## 最佳实践和代码导航技巧
+
+### 代码阅读工具
+- 使用 VS Code 或 GoLand 导航代码
+- 利用 grep 和 find 查找代码
+- 熟练使用 Go 工具链辅助阅读（godoc、guru）
+- 使用 Cursor IDE 高效阅读代码
+
+### 跟踪代码执行流程
+- 从主入口开始向下钻取
+- 跟踪控制流程和事件传播
+- 理解组件间的通信机制
+- 通过日志和断点理解执行路径
+
+### 文档和社区资源
+- Kubernetes 官方文档
+- sig-architecture 和相关 SIG 的设计文档
+- 开发者指南和贡献指南
+- 社区会议和讨论记录
+
+## CLI 和工具链
+
+### 开发工具链
+- 熟悉 `make` 和 Makefile 目标
+- 理解 `hack/` 目录中的脚本
+- 掌握 `kubectl` 的高级用法
+- 学习使用 `kubeadm` 的底层组件
+
+### 调试和诊断工具
+- `kubectl exec` 和 `kubectl debug`
+- 利用 `crictl` 和 `ctr` 操作容器
+- 使用 `etcdctl` 检查存储状态
+- 网络诊断工具（如 `tcpdump` 和 `iptables`）
+
+## 1.32 版本特性解析
+
+### 1.32 版本主要变化
+- 新特性和功能改进
+- API 变更和废弃
+- 架构和设计变更
+- 性能优化和扩展性改进
+
+### 1.32 关键代码区域
+- 列出 1.32 版本中主要更改的代码区域
+- 重点关注的新增组件和功能
+- 可能需要特别注意的实现细节

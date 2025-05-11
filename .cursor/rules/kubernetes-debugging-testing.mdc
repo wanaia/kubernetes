@@ -1,0 +1,302 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Kubernetes 调试与测试指南
+
+## 测试框架与策略
+
+### 测试类型
+- 单元测试：测试单个功能和组件
+- 集成测试：测试组件间的交互
+- 端到端测试：测试整个系统
+- 一致性测试：验证与API规范的一致性
+- 性能测试：测试系统性能和可扩展性
+
+### 测试框架
+- Go 标准测试库 `testing`
+- 表驱动测试模式
+- Ginkgo/Gomega BDD风格测试
+- 自定义测试框架和助手
+
+### 测试组织
+- `pkg/*/testing/` 目录：测试辅助工具
+- `test/` 目录：整体测试套件
+- `test/e2e/`: 端到端测试
+- `test/integration/`: 集成测试
+- `test/conformance/`: 一致性测试
+
+## 单元测试技术
+
+### 单元测试最佳实践
+- 遵循表驱动测试模式
+- 每个测试关注一个方面
+- 使用断言和错误检查
+- 适当使用测试替身
+- 避免过度模拟
+
+### 常用测试模式
+```go
+func TestSomething(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    string
+        expected string
+        wantErr  bool
+    }{
+        {
+            name:     "正常情况",
+            input:    "test",
+            expected: "result",
+            wantErr:  false,
+        },
+        {
+            name:     "错误情况",
+            input:    "",
+            expected: "",
+            wantErr:  true,
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            result, err := functionToTest(tt.input)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("错误期望: %v, 得到: %v", tt.wantErr, err != nil)
+                return
+            }
+            if result != tt.expected {
+                t.Errorf("期望: %v, 得到: %v", tt.expected, result)
+            }
+        })
+    }
+}
+```
+
+### 测试替身
+- 模拟（Mock）：替代外部依赖
+- 存根（Stub）：提供预定义返回
+- 伪对象（Fake）：轻量级替代实现
+- 间谍（Spy）：记录交互历史
+
+### 常用测试工具
+- `k8s.io/client-go/testing` 包
+- `k8s.io/apimachinery/testing` 包
+- 自定义测试框架
+- 模拟HTTP服务器
+
+## 集成测试
+
+### 集成测试框架
+- 使用 `test/integration` 目录
+- 启动测试性质的 API 服务器
+- 使用内存数据存储
+- 测试多组件交互
+
+### 常见集成测试模式
+- 控制器测试
+- API 服务器和存储交互
+- 调度器决策测试
+- 准入控制器链测试
+
+### 运行集成测试
+```bash
+make test-integration WHAT=./test/integration/apiserver
+```
+
+### 编写有效集成测试
+- 设置适当的测试环境
+- 清理测试资源
+- 隔离测试用例
+- 避免测试间的干扰
+
+## 端到端测试
+
+### E2E测试框架
+- Ginkgo/Gomega BDD风格
+- 使用真实集群或临时集群
+- 测试组件间的全流程交互
+- 检验系统行为和用户体验
+
+### E2E测试组织
+- `test/e2e/`: 主测试目录
+- 按功能域组织的测试套件
+- 重点关注的特性测试
+- 回归测试和长期测试
+
+### 运行E2E测试
+```bash
+# 本地运行
+go run hack/e2e.go -- --provider=local --ginkgo.focus="Pod"
+
+# 或使用kubetest
+kubetest --provider=gce --test --test_args="--ginkgo.focus=Pods"
+```
+
+### 编写E2E测试
+- 使用框架提供的辅助函数
+- 正确设置和清理测试环境
+- 使用描述性的测试名称
+- 添加详细的测试日志
+
+## 调试技术
+
+### 调试环境设置
+- 开发集群设置
+- Delve 调试器配置
+- IDE 集成调试
+- 远程调试配置
+
+### 日志调试
+- 设置日志级别
+- 过滤特定组件日志
+- 分析日志中的错误和警告
+- 追踪请求的完整日志流
+
+### 使用Delve调试
+```bash
+# 编译带调试信息
+go build -gcflags="all=-N -l" cmd/kube-apiserver/apiserver.go
+
+# 使用Delve启动
+dlv exec ./apiserver
+```
+
+### 常用Delve命令
+- `break`: 设置断点
+- `continue`: 继续执行
+- `next`: 执行下一行
+- `step`: 步入函数
+- `print`: 打印变量值
+- `goroutines`: 列出goroutines
+
+## 常见问题调试
+
+### API服务器问题
+- 检查API服务器日志
+- 验证认证和授权
+- 检查API请求和响应
+- 审查etcd中的数据
+
+### 控制器问题
+- 分析控制器日志
+- 检查协调循环
+- 验证资源状态
+- 监控事件和条件
+
+### 调度器问题
+- 查看调度器日志
+- 分析调度决策
+- 检查Pod未调度原因
+- 验证节点状态和资源
+
+### Kubelet问题
+- 检查Kubelet日志
+- 验证容器运行时状态
+- 分析Pod生命周期
+- 监控节点资源使用
+
+### 网络问题
+- 检查kube-proxy日志
+- 验证网络策略
+- 测试Service连接
+- 分析DNS解析问题
+
+## 性能测试与分析
+
+### 性能测试工具
+- 使用 `perf` 工具进行CPU分析
+- 使用 Go pprof 进行内存和CPU分析
+- 使用 `benchmark` 测试函数性能
+- 使用 `test/e2e/scalability` 进行可扩展性测试
+
+### 性能分析步骤
+1. 收集性能数据
+2. 识别热点和瓶颈
+3. 分析资源使用模式
+4. 实施和验证优化
+
+### 内存泄漏调查
+- 使用 Go pprof 内存分析
+- 监控长时间运行的组件
+- 分析对象分配和释放
+- 识别持有引用的模式
+
+### 系统级性能分析
+- 利用 Prometheus 收集指标
+- 分析关键组件的 CPU 和内存使用
+- 监控 API 服务器延迟
+- 测试在不同负载下的系统表现
+
+## 测试工具和脚本
+
+### 常用测试脚本
+- `hack/make-rules/test.sh`: 运行单元测试
+- `hack/make-rules/test-integration.sh`: 运行集成测试
+- `hack/make-rules/test-e2e.sh`: 运行端到端测试
+- `hack/verify-*.sh`: 验证代码质量
+
+### 测试辅助工具
+- `kubectl-debug`: 调试运行中的Pod
+- `kubectl exec`: 执行容器命令
+- `crictl`: 容器运行时交互
+- `etcdctl`: 直接检查etcd数据
+
+### CI/CD集成
+- Prow 测试基础设施
+- TestGrid 结果展示
+- 自动化测试触发
+- Pull Request 验证流程
+
+## 自定义测试和调试
+
+### 创建测试集群
+- 使用 kind (Kubernetes in Docker)
+- 使用 minikube 本地集群
+- 使用 kubeadm 部署测试集群
+- 在云提供商上创建集群
+
+### 测试特定组件
+- 隔离组件测试
+- 使用模拟依赖
+- 构建测试专用配置
+- 自定义测试环境
+
+### 调试实用技巧
+- 使用 `kubectl get events` 查看事件
+- 检查 Pod 状态和描述
+- 查看容器日志和状态
+- 使用端口转发进行调试
+
+### 测试数据生成
+- 使用测试夹具生成数据
+- 创建自定义资源对象
+- 模拟各种工作负载
+- 生成边缘情况测试数据
+
+## 测试策略与最佳实践
+
+### 测试驱动开发
+- 先编写测试，后实现功能
+- 增量添加测试用例
+- 持续运行测试
+- 维护高测试覆盖率
+
+### 测试覆盖率
+- 使用 `go test -cover` 测量覆盖率
+- 关注关键路径和边界条件
+- 平衡测试成本和收益
+- 针对复杂逻辑增加测试
+
+### CI流水线集成
+- 提交前测试验证
+- PR合并前测试
+- 夜间全面测试
+- 定期性能和可扩展性测试
+
+### 测试维护
+- 定期审查和更新测试
+- 删除过时的测试
+- 改进测试可读性
+- 减少测试冗余和重复
